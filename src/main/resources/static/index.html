@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket Demo with AES Encryption</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        input, button {
+            margin: 10px 0;
+            padding: 5px;
+        }
+        #messages {
+            border: 1px solid #ddd;
+            padding: 10px;
+            height: 300px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+<h1>WebSocket Demo with AES Encryption</h1>
+<input type="text" id="baseUrlInput" placeholder="Enter base WebSocket URL" value="ws://localhost:8080/ws">
+<input type="text" id="paramsInput" placeholder="Enter parameters" value="15928117602">
+<button onclick="connect()">Connect</button>
+<p id="connectionStatus">Not connected</p>
+<br>
+<input type="text" id="messageInput" placeholder="Enter your message">
+<button onclick="sendMessage()">Send</button>
+<div id="messages"></div>
+
+<script>
+    let socket;
+    const messagesDiv = document.getElementById("messages");
+    const connectionStatus = document.getElementById("connectionStatus");
+    const SECRET_KEY = "-unify~!@#qaz019"; // Must match the key on the server
+
+    function encryptAndEncode(data) {
+        const keyBytes = CryptoJS.enc.Utf8.parse(SECRET_KEY);
+        const encrypted = CryptoJS.AES.encrypt(data, keyBytes, {
+            mode: CryptoJS.mode.ECB,
+            padding: CryptoJS.pad.Pkcs7
+        });
+        // Log the intermediate steps
+        console.log("Original data:", data);
+        console.log("Encrypted (Base64):", encrypted.toString());
+        // Convert to Base64 and make URL safe
+        let urlSafe = encrypted.toString().replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+        console.log("URL safe encrypted:", urlSafe);
+
+        return encodeURIComponent(urlSafe);
+    }
+
+    function connect() {
+        const baseUrl = document.getElementById("baseUrlInput").value;
+        const params = document.getElementById("paramsInput").value;
+
+        let url = baseUrl;
+        if (params) {
+            const encodedParams = encryptAndEncode(params);
+            url += '/' + encodedParams;
+        }
+
+        console.log("Attempting to connect to:", url);
+
+        try {
+            socket = new WebSocket(url);
+        } catch (error) {
+            console.error("Error creating WebSocket:", error);
+            updateStatus("Error: " + error.message, "red");
+            return;
+        }
+
+        socket.onopen = function(e) {
+            console.log("WebSocket connection established");
+            updateStatus("Connected", "green");
+            addMessage("Connected to WebSocket server");
+        };
+
+        socket.onmessage = function(event) {
+            console.log("Message from server:", event.data);
+            addMessage("Server: " + event.data);
+        };
+
+        socket.onclose = function(event) {
+            if (event.wasClean) {
+                console.log(`Connection closed cleanly, code=${event.code} reason=${event.reason}`);
+                updateStatus(`Disconnected: ${event.reason}`, "orange");
+            } else {
+                console.error('Connection died');
+                updateStatus("Connection died", "red");
+            }
+            addMessage("Disconnected from WebSocket server");
+        };
+
+        socket.onerror = function(error) {
+            console.error("WebSocket error:", error);
+            updateStatus("Error", "red");
+            addMessage("Error: " + (error.message || "Unknown error"));
+        };
+    }
+
+    function sendMessage() {
+        const messageInput = document.getElementById("messageInput");
+        const message = messageInput.value;
+        if (socket && socket.readyState === WebSocket.OPEN) {
+            console.log("Sending message:", message);
+            socket.send(message);
+            addMessage("You: " + message);
+            messageInput.value = "";
+        } else {
+            console.error("WebSocket is not connected");
+            addMessage("Error: WebSocket is not connected");
+        }
+    }
+
+    function addMessage(message) {
+        console.log("Adding message:", message);
+        const messageElement = document.createElement("p");
+        messageElement.textContent = message;
+        messagesDiv.appendChild(messageElement);
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    }
+
+    function updateStatus(status, color) {
+        console.log("Updating status:", status, color);
+        connectionStatus.textContent = status;
+        connectionStatus.style.color = color;
+    }
+
+    // Add event listeners for Enter key
+    document.getElementById("paramsInput").addEventListener("keyup", function(event) {
+        if (event.key === "Enter") {
+            connect();
+        }
+    });
+
+    document.getElementById("messageInput").addEventListener("keyup", function(event) {
+        if (event.key === "Enter") {
+            sendMessage();
+        }
+    });
+</script>
+</body>
+</html>
